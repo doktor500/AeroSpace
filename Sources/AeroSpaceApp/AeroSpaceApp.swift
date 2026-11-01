@@ -14,7 +14,9 @@ struct AeroSpaceApp: App {
     }
 
     var body: some Scene {
-        menuBar(viewModel: viewModel)
+        #if !SPACE_CUBE // Space Cube's own menu bar item stands in for this one
+            menuBar(viewModel: viewModel)
+        #endif
         getMessageWindow(messageModel: messageModel)
             .onChange(of: messageModel.message) { message in
                 if message != nil {

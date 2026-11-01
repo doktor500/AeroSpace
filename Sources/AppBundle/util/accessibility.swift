@@ -5,6 +5,11 @@ import PrivateApi
 @MainActor
 func waitForAccessibilityPermission_nonCancellable() async {
     let options = [axTrustedCheckOptionPrompt: true]
+    #if SPACE_CUBE
+        // Space Cube launches the engine as its child, so macOS checks Space Cube's
+        // Accessibility grant. Space Cube asks for it; the engine only waits for it.
+        TrayMenuModel.shared.axPermissionStatus = .waiting
+    #endif
     while true {
         let status = TrayMenuModel.shared.axPermissionStatus == .waitingWithPrompt
             ? AXIsProcessTrustedWithOptions(options as CFDictionary)
