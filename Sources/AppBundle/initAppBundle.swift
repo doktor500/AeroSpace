@@ -5,6 +5,10 @@ import Foundation
 @MainActor public func initAppBundle() {
     Task.startUnstructured {
         initTerminationHandler()
+        #if SPACE_CUBE
+            // Space Cube stops the engine with SIGTERM when it quits: bring every window back first.
+            interceptTermination(SIGTERM)
+        #endif
         unsafe _isCli = false
         initServerArgs()
         await waitForAccessibilityPermission_nonCancellable()
