@@ -8,6 +8,11 @@ open class Window: TreeNode, Hashable {
     var isFullscreen: Bool = false
     var noOuterGapsInFullscreen: Bool = false
     var layoutReason: LayoutReason = .standard
+    #if AEROSPACE_EMBEDDED
+        /// Set when the window leaves the tiles to float: the next layout pass puts it in the
+        /// middle of its screen (`FloatingPlacement`).
+        var centersOnNextLayout = false
+    #endif
 
     @MainActor
     init(id: UInt32, _ app: any AbstractApp, lastFloatingSize: CGSize?, parent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat, index: Int) {
@@ -40,6 +45,16 @@ open class Window: TreeNode, Hashable {
     func getCenter(_ cm: CancellationMode) async throws -> CGPoint? { try await getAxRect(cm)?.center }
 
     func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) { die("Not implemented") }
+
+    /// Puts the window where the layout wants it. Embedded, the window travels there
+    /// (`WindowMotion`) rather than jumping.
+    @MainActor
+    func layoutAxFrame(_ topLeft: CGPoint, _ size: CGSize) {
+        #if AEROSPACE_EMBEDDED
+            if let window = self as? MacWindow, WindowMotion.hold(window, topLeft, size) { return }
+        #endif
+        setAxFrame(topLeft, size)
+    }
 }
 
 enum LayoutReason: Equatable {

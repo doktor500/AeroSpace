@@ -37,7 +37,7 @@ extension TreeNode {
                     } else {
                         lastAppliedLayoutPhysicalRect = physicalRect
                         window.isFullscreen = false
-                        window.setAxFrame(point, CGSize(width: width, height: height))
+                        window.layoutAxFrame(point, CGSize(width: width, height: height))
                     }
                 }
             case .tilingContainer(let container):
@@ -72,6 +72,18 @@ extension Window {
     fileprivate func layoutFloatingWindow(_ context: LayoutContext) async throws {
         let workspace = context.workspace
         let windowRect = try await getAxRect(.cancellable) // Probably not idempotent
+        #if AEROSPACE_EMBEDDED
+            if centersOnNextLayout {
+                // Just floated from the tiles: its floating size, in the middle of its screen.
+                centersOnNextLayout = false
+                if let windowRect {
+                    let visible = workspace.workspaceMonitor.visibleRect
+                    let size = FloatingPlacement.size(lastFloatingSize ?? windowRect.size, in: visible)
+                    layoutAxFrame(FloatingPlacement.topLeft(of: size, in: visible), size)
+                    return
+                }
+            }
+        #endif
         let currentMonitor = windowRect?.center.monitorApproximation
         if let currentMonitor, let windowRect, workspace != currentMonitor.activeWorkspace {
             let windowTopLeftCorner = windowRect.topLeftCorner
@@ -100,7 +112,7 @@ extension Window {
         let monitorRect = noOuterGapsInFullscreen
             ? context.workspace.workspaceMonitor.visibleRect
             : context.workspace.workspaceMonitor.visibleRectPaddedByOuterGaps
-        setAxFrame(monitorRect.topLeftCorner, CGSize(width: monitorRect.width, height: monitorRect.height))
+        layoutAxFrame(monitorRect.topLeftCorner, CGSize(width: monitorRect.width, height: monitorRect.height))
     }
 }
 

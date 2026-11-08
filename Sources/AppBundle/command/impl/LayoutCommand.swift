@@ -76,7 +76,12 @@ struct LayoutCommand: Command {
                 guard let window = target.windowOrNil else { return .fail(io.err(noWindowIsFocused)) }
                 let workspace = target.workspace
                 window.bindAsFloatingWindow(to: workspace)
-                if let size = window.lastFloatingSize { window.setAxFrame(nil, size) }
+                #if AEROSPACE_EMBEDDED
+                    // The layout pass that follows sizes it and puts it in the middle of its screen.
+                    window.centersOnNextLayout = true
+                #else
+                    if let size = window.lastFloatingSize { window.setAxFrame(nil, size) }
+                #endif
                 return .succ
         }
     }

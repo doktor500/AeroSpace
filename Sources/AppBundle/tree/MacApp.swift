@@ -156,6 +156,34 @@ final class MacApp: AbstractApp {
         }
     }
 
+    #if AEROSPACE_EMBEDDED
+        private var stepJob: RunLoopJob?
+
+        /// One step of the motions of this app's windows (`WindowMotion`): each window's size and
+        /// position, nothing more, all in one go, so windows of the same app keep pace with each
+        /// other on the app's one thread. A step the app has not got to yet makes way for this one.
+        func setAxFramesStep(_ steps: [MotionStep], log: Bool) {
+            stepJob?.cancel()
+            let due = CACurrentMediaTime()
+            stepJob = thread?.runInLoopAsync(job: RunLoopJob(.cancellable)) { [axApp, windows] job in
+                try? disableAnimations(app: axApp.threadGuarded, job) {
+                    for step in steps {
+                        guard let window = windows.threadGuarded[step.windowId] else { continue }
+                        window.ax.set(Ax.sizeAttr, step.size)
+                        window.ax.set(Ax.topLeftCornerAttr, step.topLeft)
+                    }
+                }
+                if log {
+                    let took = (CACurrentMediaTime() - due) * 1000
+                    for step in steps {
+                        let line = String(format: "motion: window %u step %d took %.0f ms from due to done\n", step.windowId, step.number, took)
+                        FileHandle.standardError.write(Data(line.utf8))
+                    }
+                }
+            }
+        }
+    #endif
+
     func setAxFrameForTermination(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) {
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
         let semaphore = DispatchSemaphore(value: 0)
@@ -400,6 +428,16 @@ extension [UInt32: AxWindow] {
         }
     }
 }
+
+#if AEROSPACE_EMBEDDED
+    /// Where one window goes in one step of its motion (`WindowMotion`).
+    struct MotionStep: Sendable {
+        let windowId: UInt32
+        let topLeft: CGPoint
+        let size: CGSize
+        let number: Int
+    }
+#endif
 
 private func getAxRect(window: AXUIElement, job: RunLoopJob) throws -> Rect? {
     guard let topLeftCorner = window.get(Ax.topLeftCornerAttr) else { return nil }

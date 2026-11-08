@@ -154,6 +154,11 @@ enum OptimalHideCorner {
 
 @MainActor
 private func layoutWorkspaces() async throws {
+    #if AEROSPACE_EMBEDDED
+        // The frames wait for the end of the pass, so the windows travel to new places together.
+        WindowMotion.begin()
+        defer { WindowMotion.finish() }
+    #endif
     if !TrayMenuModel.shared.isEnabled {
         for workspace in Workspace.all {
             workspace.allLeafWindowsRecursive.forEach { ($0 as! MacWindow).unhideFromCorner() } // todo as!

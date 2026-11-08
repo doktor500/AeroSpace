@@ -80,6 +80,9 @@ final class MacWindow: Window {
         if MacWindow.allWindowsMap.removeValue(forKey: windowId) == nil {
             return
         }
+        #if AEROSPACE_EMBEDDED
+            WindowMotion.forget(windowId)
+        #endif
         if !skipClosedWindowsCache { cacheClosedWindowIfNeeded() }
         let parent = unbindFromParent().parent
         let deadWindowWorkspace = parent.nodeWorkspace
@@ -191,6 +194,12 @@ final class MacWindow: Window {
     }
 
     override func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) {
+        #if AEROSPACE_EMBEDDED
+            // A frame set outside the layout (parking the window in a corner, a mouse move):
+            // the window stops travelling. These calls come on the main thread.
+            let id = windowId
+            if Thread.isMainThread { MainActor.assumeIsolated { WindowMotion.cancel(id) } }
+        #endif
         macApp.setAxFrame(windowId, topLeft, size)
     }
 
