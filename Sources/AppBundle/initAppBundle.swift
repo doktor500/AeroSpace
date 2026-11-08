@@ -5,6 +5,10 @@ import Foundation
 @MainActor public func initAppBundle() {
     Task.startUnstructured {
         initTerminationHandler()
+        #if AEROSPACE_EMBEDDED
+            // The host app stops AeroSpace with SIGTERM when it quits: bring every window back first.
+            interceptTermination(SIGTERM)
+        #endif
         unsafe _isCli = false
         initServerArgs()
         await waitForAccessibilityPermission_nonCancellable()
