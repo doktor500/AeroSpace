@@ -3,8 +3,21 @@ import SwiftUI
 
 // This file is shared between SPM and xcode project
 
+#if AEROSPACE_EMBEDDED
+    /// Keeps the engine running when its message window closes. Its menu bar item is not
+    /// inserted, so the message window is its only window, and SwiftUI would otherwise quit the
+    /// app as soon as that window goes (a config warning shown, then cleared by the next
+    /// reload), leaving the host to restart it.
+    final class EmbeddedAppDelegate: NSObject, NSApplicationDelegate {
+        func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool { false }
+    }
+#endif
+
 @main
 struct AeroSpaceApp: App {
+    #if AEROSPACE_EMBEDDED
+        @NSApplicationDelegateAdaptor(EmbeddedAppDelegate.self) var appDelegate
+    #endif
     @StateObject var viewModel = TrayMenuModel.shared
     @StateObject var messageModel = MessageModel.shared
     @Environment(\.openWindow) var openWindow: OpenWindowAction
