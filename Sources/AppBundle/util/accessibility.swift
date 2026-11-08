@@ -5,6 +5,11 @@ import PrivateApi
 @MainActor
 func waitForAccessibilityPermission_nonCancellable() async {
     let options = [axTrustedCheckOptionPrompt: true]
+    #if AEROSPACE_EMBEDDED
+        // The host app launches AeroSpace as its child, so macOS checks the host's
+        // Accessibility grant. The host asks for it; AeroSpace only waits for it.
+        TrayMenuModel.shared.axPermissionStatus = .waiting
+    #endif
     while true {
         let status = TrayMenuModel.shared.axPermissionStatus == .waitingWithPrompt
             ? AXIsProcessTrustedWithOptions(options as CFDictionary)

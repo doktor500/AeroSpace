@@ -4,13 +4,17 @@ import ServiceManagement
 
 @MainActor
 func syncStartAtLogin() {
-    cleanupPlistFromPrevVersions()
-    let service = SMAppService.mainApp
-    switch true {
-        case !config.startAtLogin: _ = try? service.unregister()
-        case isDebug: print("'start-at-login = true' has no effect in debug builds")
-        default: _ = try? service.register()
-    }
+    #if AEROSPACE_EMBEDDED
+        // The host app starts AeroSpace, so the host's own login item covers both.
+    #else
+        cleanupPlistFromPrevVersions()
+        let service = SMAppService.mainApp
+        switch true {
+            case !config.startAtLogin: _ = try? service.unregister()
+            case isDebug: print("'start-at-login = true' has no effect in debug builds")
+            default: _ = try? service.register()
+        }
+    #endif
 }
 
 private func cleanupPlistFromPrevVersions() { // todo Drop after a couple of versions
