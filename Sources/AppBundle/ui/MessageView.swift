@@ -24,6 +24,12 @@ public func getMessageWindow(messageModel: MessageModel) -> some Scene {
 
 public let messageWindowId = "\(aeroSpaceAppName).messageView"
 
+#if AEROSPACE_EMBEDDED
+    private let isEmbedded = true
+#else
+    private let isEmbedded = false
+#endif
+
 struct MessageView: View {
     @StateObject private var model: MessageModel
     @Environment(\.dismiss) private var dismiss: DismissAction
@@ -120,7 +126,7 @@ public struct Message: Hashable, Equatable {
     init(
         type: MessageType = .config,
         title: String = aeroSpaceAppName,
-        description: String = "AeroSpace Config Diagnostics",
+        description: String = isEmbedded ? "There is a problem with the config" : "AeroSpace Config Diagnostics",
         body: String,
         containsWarnings: Bool,
     ) {
