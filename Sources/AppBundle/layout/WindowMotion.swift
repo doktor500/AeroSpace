@@ -19,20 +19,13 @@
     /// apps open as windows: making room for each of them would read as flicker).
     @MainActor
     enum WindowMotion {
-        /// How long a motion takes, for a layout or resize key.
+        /// How long a motion takes: the same for a layout or resize key and for the windows
+        /// making room for one that comes or filling in after one that goes.
         /// Read each time, so `defaults write dev.kenfos.space-cube.engine motionDuration -float 0.5`
         /// changes it live, no restart needed.
         static var duration: CFTimeInterval {
             let set = UserDefaults.standard.double(forKey: "motionDuration")
             return set > 0 ? set : 0.28
-        }
-        /// How long a motion takes when a window comes or goes (opened or closed, moved to or
-        /// from the workspace): the same both ways, and much slower than for a key pressed, since
-        /// the eye is on the window coming or going and the others move unasked.
-        /// `openCloseDuration` in the defaults changes it live.
-        static var openCloseDuration: CFTimeInterval {
-            let set = UserDefaults.standard.double(forKey: "openCloseDuration")
-            return set > 0 ? set : 0.35
         }
         /// DEBUG: `defaults write dev.kenfos.space-cube.engine motionLog -bool true` logs each pass
         /// and each step to the engine's log.
@@ -70,9 +63,6 @@
         /// When each small new window (a popup, a panel) arrived, for a few seconds: the layout
         /// snapping back once it is gone again is as instant as its arrival was.
         private static var smallArrivals: [UInt32: CFTimeInterval] = [:]
-        /// The windows the last pass placed: one missing from the next pass has left the screen,
-        /// one not in it has just come.
-        private static var lastHeld: Set<UInt32> = []
 
         static func begin() {
             collecting = true
@@ -94,10 +84,6 @@
             held = []
             let now = CACurrentMediaTime()
             smallArrivals = smallArrivals.filter { now - $0.value < popupLifetime }
-            let heldNow = Set(batch.map(\.windowId))
-            let cameOrWent = heldNow != lastHeld
-            lastHeld = heldNow
-
             var changed: [Held] = []
             for item in batch {
                 let id = item.windowId
@@ -126,14 +112,13 @@
             for item in changed { pendingTargets[item.windowId] = item.target }
             // Where the windows are now is read on their apps' threads: not under the layout
             // pass, which a later refresh may cancel.
-            let duration = cameOrWent ? openCloseDuration : duration
             Task.startUnstructured { @MainActor in
-                await start(changed, duration: duration)
+                await start(changed)
             }
         }
 
-        /// Starts the motions of `items`, from where their windows are now, each taking `duration`.
-        private static func start(_ items: [Held], duration: CFTimeInterval) async {
+        /// Starts the motions of `items`, from where their windows are now.
+        private static func start(_ items: [Held]) async {
             // All the apps at once: each read waits on its app's thread.
             let reads = items.map { item in
                 let id = item.windowId
