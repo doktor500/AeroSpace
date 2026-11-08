@@ -187,6 +187,11 @@ private func layoutWorkspaces() async throws {
         monitorToOptimalHideCorner[monitor.rect.topLeftCorner] = corner
     }
 
+    #if AEROSPACE_EMBEDDED
+        // The host glides the windows there: the frames wait for it until the pass ends.
+        GlideBatch.begin()
+        defer { GlideBatch.finish() }
+    #endif
     // to reduce flicker, first unhide visible workspaces, then hide invisible ones
     for monitor in monitors {
         let workspace = monitor.activeWorkspace

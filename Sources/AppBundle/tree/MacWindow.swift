@@ -191,6 +191,12 @@ final class MacWindow: Window {
     }
 
     override func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) {
+        #if AEROSPACE_EMBEDDED
+            // A layout pass holds its frames until the host has pictured the screen.
+            // Layout passes run on the main actor; the window only travels back to it.
+            nonisolated(unsafe) let window = self
+            if Thread.isMainThread, MainActor.assumeIsolated({ GlideBatch.hold(window, topLeft, size) }) { return }
+        #endif
         macApp.setAxFrame(windowId, topLeft, size)
     }
 
