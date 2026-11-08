@@ -19,12 +19,21 @@
     /// apps open as windows: making room for each of them would read as flicker).
     @MainActor
     enum WindowMotion {
-        /// How long a motion takes.
-        /// DEBUG: `defaults write dev.kenfos.space-cube.engine motionDuration -float 2` slows it for a look.
-        static let duration: CFTimeInterval = {
+        /// How long a motion takes, for a layout or resize key.
+        /// Read each time, so `defaults write dev.kenfos.space-cube.engine motionDuration -float 0.5`
+        /// changes it live, no restart needed.
+        static var duration: CFTimeInterval {
             let set = UserDefaults.standard.double(forKey: "motionDuration")
             return set > 0 ? set : 0.28
-        }()
+        }
+        /// How long a motion takes when a window comes or goes (opened or closed, moved to or
+        /// from the workspace): the same both ways, and much slower than for a key pressed, since
+        /// the eye is on the window coming or going and the others move unasked.
+        /// `openCloseDuration` in the defaults changes it live.
+        static var openCloseDuration: CFTimeInterval {
+            let set = UserDefaults.standard.double(forKey: "openCloseDuration")
+            return set > 0 ? set : 0.35
+        }
         /// DEBUG: `defaults write dev.kenfos.space-cube.engine motionLog -bool true` logs each pass
         /// and each step to the engine's log.
         static let logging = UserDefaults.standard.bool(forKey: "motionLog")
@@ -32,7 +41,7 @@
         private static let frameInterval: CFTimeInterval = 1.0 / 60
         /// A new window smaller than this part of the screen is a popup or a panel.
         private static let smallWindowShare: CGFloat = 1.0 / 12
-        /// A window gone again this soon after it was first laid out was a popup.
+        /// A small new window gone again this soon after it arrived was a popup.
         private static let popupLifetime: CFTimeInterval = 3
 
         private struct Held: Sendable {
@@ -46,6 +55,7 @@
             let from: Rect
             let to: Rect
             let start: CFTimeInterval
+            let duration: CFTimeInterval
             var steps = 0
         }
 
@@ -57,8 +67,12 @@
         private static var pendingTargets: [UInt32: Rect] = [:]
         private static var motions: [UInt32: Motion] = [:]
         private static var timer: Timer?
-        /// When each window was first laid out, for a few seconds.
-        private static var firstLaidOut: [UInt32: CFTimeInterval] = [:]
+        /// When each small new window (a popup, a panel) arrived, for a few seconds: the layout
+        /// snapping back once it is gone again is as instant as its arrival was.
+        private static var smallArrivals: [UInt32: CFTimeInterval] = [:]
+        /// The windows the last pass placed: one missing from the next pass has left the screen,
+        /// one not in it has just come.
+        private static var lastHeld: Set<UInt32> = []
 
         static func begin() {
             collecting = true
@@ -79,7 +93,10 @@
             let batch = held
             held = []
             let now = CACurrentMediaTime()
-            firstLaidOut = firstLaidOut.filter { now - $0.value < popupLifetime }
+            smallArrivals = smallArrivals.filter { now - $0.value < popupLifetime }
+            let heldNow = Set(batch.map(\.windowId))
+            let cameOrWent = heldNow != lastHeld
+            lastHeld = heldNow
 
             var changed: [Held] = []
             for item in batch {
@@ -94,10 +111,9 @@
             }
             guard !changed.isEmpty else { return }
 
-            // The layout snapping back once a window that just appeared is gone again.
-            let popupGone = firstLaidOut.keys.contains { MacWindow.allWindowsMap[$0] == nil }
-            if popupGone { firstLaidOut = firstLaidOut.filter { MacWindow.allWindowsMap[$0.key] != nil } }
-            for item in changed where item.isNew { firstLaidOut[item.windowId] = now }
+            // The layout snapping back once a small window that just appeared is gone again.
+            let popupGone = smallArrivals.keys.contains { MacWindow.allWindowsMap[$0] == nil }
+            if popupGone { smallArrivals = smallArrivals.filter { MacWindow.allWindowsMap[$0.key] != nil } }
 
             if isLeftMouseButtonDown || isStartup || popupGone {
                 if logging {
@@ -110,13 +126,14 @@
             for item in changed { pendingTargets[item.windowId] = item.target }
             // Where the windows are now is read on their apps' threads: not under the layout
             // pass, which a later refresh may cancel.
+            let duration = cameOrWent ? openCloseDuration : duration
             Task.startUnstructured { @MainActor in
-                await start(changed)
+                await start(changed, duration: duration)
             }
         }
 
-        /// Starts the motions of `items`, from where their windows are now.
-        private static func start(_ items: [Held]) async {
+        /// Starts the motions of `items`, from where their windows are now, each taking `duration`.
+        private static func start(_ items: [Held], duration: CFTimeInterval) async {
             // All the apps at once: each read waits on its app's thread.
             let reads = items.map { item in
                 let id = item.windowId
@@ -143,6 +160,8 @@
                 return from.width * from.height < visible.width * visible.height * smallWindowShare
             }
             if let popup {
+                let now = CACurrentMediaTime()
+                for item in current where item.isNew { smallArrivals[item.windowId] = now }
                 if logging {
                     let from = frames[popup.windowId]
                     log("pass: \(current.count) set at once, a small new window (\(Int(from?.width ?? 0))x\(Int(from?.height ?? 0)))")
@@ -163,11 +182,11 @@
                     set(item)
                     continue
                 }
-                motions[id] = Motion(window: window, from: from, to: item.target, start: now)
+                motions[id] = Motion(window: window, from: from, to: item.target, start: now, duration: duration)
                 lastTargets[id] = item.target
                 moving += 1
             }
-            if logging { log("pass: \(moving) of \(current.count) on their way") }
+            if logging { log("pass: \(moving) of \(current.count) on their way, \(Int(duration * 1000)) ms") }
             if moving > 0, timer == nil {
                 let timer = Timer(timeInterval: frameInterval, repeats: true) { _ in
                     MainActor.assumeIsolated { tick() }
@@ -184,7 +203,7 @@
             // would leave the others' steps waiting until they are dropped.
             var steps: [pid_t: (app: MacApp, steps: [MotionStep])] = [:]
             for (id, var motion) in motions {
-                let t = min(1, (now - motion.start) / duration)
+                let t = min(1, (now - motion.start) / motion.duration)
                 if t >= 1 {
                     motions.removeValue(forKey: id)
                     motion.window.macApp.setAxFrame(id, motion.to.topLeftCorner, motion.to.size)
