@@ -24,7 +24,14 @@ import Foundation
         startUnixSocketServer()
         GlobalObserver.initObserver()
         Workspace.garbageCollectUnusedWorkspaces() // init workspaces
-        _ = Workspace.all.first?.focusWorkspace()
+        #if AEROSPACE_EMBEDDED
+            // Windows already open go back to the workspaces an earlier engine had them on.
+            let savedFocus = loadSavedWorld()
+            _ = (savedFocus.map { Workspace.get(byName: $0) } ?? Workspace.all.first)?.focusWorkspace()
+        #else
+            let savedFocus: String? = nil
+            _ = Workspace.all.first?.focusWorkspace()
+        #endif
         await runHeavyCompleteRefreshSession(
             .startup,
             // It's important for the first initialization to be non cancellable
@@ -33,7 +40,7 @@ import Foundation
             layoutWorkspaces: false,
         )
         try await runLightSession(.startup, .forceRun) {
-            smartLayoutAtStartup()
+            if savedFocus == nil { smartLayoutAtStartup() } // A restored layout stays as it was
             _ = await config.afterStartupCommand.run(.defaultEnv, .emptyStdin)
         }
     }

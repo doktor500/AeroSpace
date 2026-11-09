@@ -33,6 +33,9 @@ final class MacWindow: Window {
         if let existing = allWindowsMap[windowId] { return existing }
         let window = MacWindow(windowId, macApp, lastFloatingSize: rect?.size, parent: data.parent, adaptiveWeight: data.adaptiveWeight, index: data.index)
         allWindowsMap[windowId] = window
+        #if AEROSPACE_EMBEDDED
+            if let parking = takeSavedCornerParking(windowId: windowId, pid: macApp.pid) { window.restoreCornerParking(parking) }
+        #endif
 
         try await debugWindowsIfRecording(window, .cancellable)
         if try await !restoreClosedWindowsCacheIfNeeded(newlyDetectedWindow: window) {
@@ -188,6 +191,19 @@ final class MacWindow: Window {
     override var isHiddenInCorner: Bool {
         prevUnhiddenProportionalPositionInsideWorkspaceRect != nil
     }
+
+    #if AEROSPACE_EMBEDDED
+        /// Where the window was before it was parked in a corner, as a share of its monitor, so a
+        /// later engine can bring a floating window back to its place rather than leave it parked.
+        var cornerParking: SavedCornerParking? {
+            prevUnhiddenProportionalPositionInsideWorkspaceRect.map { SavedCornerParking(position: $0, floatingSize: lastFloatingSize) }
+        }
+
+        @MainActor func restoreCornerParking(_ parking: SavedCornerParking) {
+            prevUnhiddenProportionalPositionInsideWorkspaceRect = parking.position
+            if let size = parking.floatingSize { lastFloatingSize = size }
+        }
+    #endif
 
     override func getAxSize(_ cm: CancellationMode) async throws -> CGSize? {
         try await macApp.getAxSize(windowId, cm)

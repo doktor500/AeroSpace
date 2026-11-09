@@ -49,7 +49,11 @@ func runHeavyCompleteRefreshSession(
         }
     }
     switch res {
-        case .success(()): break
+        case .success(()):
+            #if AEROSPACE_EMBEDDED
+                // Not at startup: windows still being detected would be missing from the saved world.
+                if !event.isStartup { saveWorldIfChanged() }
+            #endif
         case .failure(let err as CancellationError): check(assumeCancellable, "Non cancellable refresh session was canceled: \(err) (\(type(of: err)))")
         case .failure(let err): die("Illegal error: \(err)")
     }

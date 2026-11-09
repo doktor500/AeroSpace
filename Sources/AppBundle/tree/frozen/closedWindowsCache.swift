@@ -9,7 +9,7 @@ import Common
 /// so that once the screen is unlocked, AeroSpace could restore windows to where they were
 @MainActor private var closedWindowsCache = FrozenWorld(workspaces: [], monitors: [], windowIds: [])
 
-struct FrozenMonitor: Sendable {
+struct FrozenMonitor: Sendable, Codable, Equatable {
     let topLeftCorner: CGPoint
     let visibleWorkspace: String
 
@@ -19,7 +19,7 @@ struct FrozenMonitor: Sendable {
     }
 }
 
-struct FrozenWorkspace: Sendable {
+struct FrozenWorkspace: Sendable, Codable, Equatable {
     let name: String
     let monitor: FrozenMonitor // todo drop this property, once monitor to workspace assignment migrates to TreeNode
     let rootTilingNode: FrozenContainer
@@ -124,3 +124,11 @@ private func restoreTreeRecursive(frozenContainer: FrozenContainer, parent: NonL
 @MainActor func resetClosedWindowsCache() {
     closedWindowsCache = FrozenWorld(workspaces: [], monitors: [], windowIds: [])
 }
+
+#if AEROSPACE_EMBEDDED
+    /// The world saved by an earlier engine of this login: its windows go back where they were
+    /// as each one is detected again, the same way they come back after the lock screen.
+    @MainActor func loadClosedWindowsCache(_ world: FrozenWorld) {
+        closedWindowsCache = world
+    }
+#endif
